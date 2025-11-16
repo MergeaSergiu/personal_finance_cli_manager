@@ -5,12 +5,12 @@ application developed in Go.
 Its purpose is to facilitate the management, analysis, and categorization of
 personal financial transactions through an efficient, text-based interface, while utilizing an SQLite database to ensure persistent, reliable, and structured storage of all financial data.
 
-##  Technologies used
+##  Tech Stack
 
 - Go: 1.25.4
 - Database: SQLite
 - CLI Framework: Bubbletea https://github.com/charmbracelet/bubbletea
-- 
+
 ##  Features
 
 - A text-based terminal user interface implemented using Bubbletea. 
@@ -28,4 +28,4 @@ personal financial transactions through an efficient, text-based interface, whil
 
 - The user can search transactions and filter data using specific criteria.
 
-- System to ensure data consistency and integrity
+- System ensures data consistency and integrity
