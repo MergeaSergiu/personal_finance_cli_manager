@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	_ "github.com/charmbracelet/bubbletea"
 	"log"
 	"peronal_finance_cli_manager/internal/db"
 )
