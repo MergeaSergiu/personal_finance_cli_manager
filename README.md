@@ -1,1 +1,1 @@
-# personal_finance_cli_manager
+# Personal_Finance_Cli_Manager
