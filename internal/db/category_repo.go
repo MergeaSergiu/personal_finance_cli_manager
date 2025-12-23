@@ -6,13 +6,14 @@ import (
 	"peronal_finance_cli_manager/internal/models"
 )
 
-func CreateCategory(name string) (*models.Category, error) {
+func CreateCategory(name string, budget float32) (*models.Category, error) {
 	if name == "" {
 		return nil, errors.New("Category name is empty")
 	}
 
 	cat := models.Category{
-		Name: name,
+		Name:   name,
+		Budget: budget,
 	}
 	if err := DB.Create(&cat).Error; err != nil {
 		return nil, err

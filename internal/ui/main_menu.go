@@ -25,7 +25,9 @@ type MenuModel struct {
 
 type CategoryItem models.Category
 
-func (c CategoryItem) Title() string       { return fmt.Sprintf("%s (ID: %d)", c.Name, c.ID) }
+func (c CategoryItem) Title() string {
+	return fmt.Sprintf("%s (ID: %d), (Budget: %2.f)", c.Name, c.ID, c.Budget)
+}
 func (c CategoryItem) Description() string { return "" }
 func (c CategoryItem) FilterValue() string { return c.Name }
 
@@ -80,6 +82,8 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "a":
 				m.state = StateAdd
 				m.inputModel.input.SetValue("")
+				m.inputModel.inputBudget.SetValue("")
+				m.inputModel.focusIndex = 0
 				m.inputModel.errMsg = ""
 				return m, nil
 
@@ -145,7 +149,9 @@ func (m *MenuModel) View() string {
 	case StateList:
 		return "[v] View Categories • [a] Add category • [q] Quit"
 	case StateAdd:
-		return fmt.Sprintf("➕ Add Category\n\n%s\n\n[Enter] Save • [b] Back", m.inputModel.View())
+		return fmt.Sprintf(
+			"➕ Add Category\n\n%s\n\n[c] Switch field • [Enter] Save • [b] Back",
+			m.inputModel.View())
 	case StateView:
 		return fmt.Sprintf("%s\n\n[b] Back", m.list.View())
 	}
