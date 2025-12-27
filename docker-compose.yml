@@ -1,0 +1,19 @@
+services:
+  # RabbitMQ server
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq_personal_finance_manager
+    ports:
+      - "5672:5672"     # AMQP protocol
+      - "15674:15672"   # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  # MailDev for SMTP testing
+  maildev:
+    image: maildev/maildev
+    container_name: maildev_personal_finance_manager
+    ports:
+      - "1082:1080"  # Web UI
+      - "1025:1025"  # SMTP server

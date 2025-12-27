@@ -39,6 +39,11 @@ func CreateTransaction(categoryName string, amount float32, dateStr string) (*mo
 	// attach category for convenience
 	tx.Category = cat
 
+	// Check budget
+	if err := CheckBudget(DB, cat, amount, dateStr); err != nil {
+		fmt.Println("Budget alert triggered")
+	}
+
 	return tx, nil
 }
 
