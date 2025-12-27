@@ -15,12 +15,18 @@ const (
 	StateList state = iota
 	StateAdd
 	StateView
+	StateAddTransaction
+	StateViewTransactions
 )
 
 type MenuModel struct {
-	list       list.Model
-	inputModel *InputModel
-	state      state
+	list                  list.Model
+	inputModel            *InputModel
+	transactionInputModel *TransactionInputModel
+	state                 state
+
+	transactions     []models.Transaction
+	selectedCategory *models.Category
 }
 
 type CategoryItem models.Category
@@ -39,9 +45,10 @@ func NewMenuModel() *MenuModel {
 	l.SetFilteringEnabled(false)
 
 	return &MenuModel{
-		list:       l,
-		inputModel: NewInputModelPtr(),
-		state:      StateList,
+		list:                  l,
+		inputModel:            NewInputModelPtr(),
+		transactionInputModel: NewTransactionInputModel(),
+		state:                 StateList,
 	}
 }
 
@@ -56,11 +63,13 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// 1️⃣ Handle ESC globally first
 	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "esc" {
 		switch m.state {
-		case StateAdd, StateView:
+		case StateAdd, StateView, StateAddTransaction, StateViewTransactions:
 			m.state = StateList
-			// Clear input if coming from Add
-			m.inputModel.input.SetValue("")
-			m.inputModel.errMsg = ""
+			if m.state == StateAdd {
+				m.inputModel.input.SetValue("")
+				m.inputModel.inputBudget.SetValue("")
+				m.inputModel.errMsg = ""
+			}
 			return m, nil
 		}
 	}
@@ -73,6 +82,8 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch m.state {
+
+	// ====================== CATEGORY LIST ======================
 	case StateList:
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -103,6 +114,15 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.list.SetItems(items)
 				m.state = StateView
 				return m, nil
+
+			case "t": // Add Transaction
+				m.transactionInputModel.inputCategory.SetValue("")
+				m.transactionInputModel.inputAmount.SetValue("")
+				m.transactionInputModel.focusIndex = 0
+				m.transactionInputModel.errMsg = ""
+				m.state = StateAddTransaction
+				return m, nil
+
 			}
 		}
 
@@ -110,6 +130,7 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list, cmd = m.list.Update(msg)
 		return m, cmd
 
+		// ====================== ADD CATEGORY ======================
 	case StateAdd:
 		var cmd tea.Cmd
 		var cat *models.Category
@@ -124,20 +145,76 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "b" && cat == nil {
 			m.state = StateList
 			m.inputModel.input.SetValue("")
+			m.inputModel.inputBudget.SetValue("")
 			m.inputModel.errMsg = ""
 		}
 
 		return m, cmd
 
+		// ====================== VIEW CATEGORY LIST ======================
 	case StateView:
 		var cmd tea.Cmd
 		m.list, cmd = m.list.Update(msg)
+
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+
+			case "enter":
+				item := m.list.SelectedItem()
+				if item == nil {
+					return m, cmd
+				}
+
+				cat := item.(CategoryItem)
+				m.selectedCategory = (*models.Category)(&cat)
+
+				txs, err := db.GetTransactionsByCategory(cat.ID)
+				if err != nil {
+					fmt.Println("Error loading transactions:", err)
+					return m, cmd
+				}
+
+				m.transactions = txs
+				m.state = StateViewTransactions
+				return m, cmd
+
+			case "b":
+				m.state = StateList
+				return m, cmd
+			}
+		}
+
+		return m, cmd
+	// ====================== ADD TRANSACTION ======================
+	case StateAddTransaction:
+		var cmd tea.Cmd
+		var tx *models.Transaction
+
+		m.transactionInputModel, cmd, tx, _ = m.transactionInputModel.Update(msg)
+
+		if tx != nil {
+			// append to transaction list
+
+			m.transactions = append(m.transactions, *tx)
+			m.state = StateList
+		}
 
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "b" {
 			m.state = StateList
 		}
 
 		return m, cmd
+
+	// ====================== VIEW TRANSACTIONS ======================
+	case StateViewTransactions:
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "b", "esc":
+				m.state = StateView
+				return m, nil
+			}
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -145,15 +222,58 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the UI
 func (m *MenuModel) View() string {
+
 	switch m.state {
 	case StateList:
-		return "[v] View Categories • [a] Add category • [q] Quit"
+		return "[v] View Categories • [a] Add category • [t] Add transaction • [q] Quit"
+
 	case StateAdd:
 		return fmt.Sprintf(
-			"➕ Add Category\n\n%s\n\n[c] Switch field • [Enter] Save • [b] Back",
+			"➕ Add Category\n\n%s\n\n[Tab] Switch field • [Enter] Save • [b] Back",
 			m.inputModel.View())
+
 	case StateView:
 		return fmt.Sprintf("%s\n\n[b] Back", m.list.View())
+
+	case StateAddTransaction:
+		return fmt.Sprintf(
+			"➕ Add Transaction\n\n%s",
+			m.transactionInputModel.View(),
+		)
+
+	case StateViewTransactions:
+		if m.selectedCategory == nil {
+			return "📄 Transactions\n\nNo category selected.\n\n[b] Back"
+		}
+
+		if len(m.transactions) == 0 {
+			return fmt.Sprintf(
+				"📄 Transactions for %s\n\nNo transactions.\n\n[b] Back",
+				m.selectedCategory.Name,
+			)
+		}
+
+		view := fmt.Sprintf(
+			"📄 Transactions for %s\n\n",
+			m.selectedCategory.Name,
+		)
+
+		for _, tx := range m.transactions {
+			sign := "+"
+			if tx.Amount < 0 {
+				sign = "-"
+			}
+
+			view += fmt.Sprintf(
+				"%s%.2f\n",
+				sign,
+				tx.Amount,
+			)
+		}
+
+		view += "\n[b] Back"
+		return view
 	}
+
 	return ""
 }
