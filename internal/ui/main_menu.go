@@ -118,6 +118,7 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "t": // Add Transaction
 				m.transactionInputModel.inputCategory.SetValue("")
 				m.transactionInputModel.inputAmount.SetValue("")
+				m.transactionInputModel.inputDate.SetValue("")
 				m.transactionInputModel.focusIndex = 0
 				m.transactionInputModel.errMsg = ""
 				m.state = StateAddTransaction
@@ -229,7 +230,7 @@ func (m *MenuModel) View() string {
 
 	case StateAdd:
 		return fmt.Sprintf(
-			"➕ Add Category\n\n%s\n\n[Tab] Switch field • [Enter] Save • [b] Back",
+			"➕ Add Category\n\n%s",
 			m.inputModel.View())
 
 	case StateView:
@@ -265,9 +266,10 @@ func (m *MenuModel) View() string {
 			}
 
 			view += fmt.Sprintf(
-				"%s%.2f\n",
+				"%s%.2f  |  %s\n",
 				sign,
 				tx.Amount,
+				tx.Date.Format("2006-01-02"),
 			)
 		}
 

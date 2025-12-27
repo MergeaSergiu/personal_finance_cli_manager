@@ -6,6 +6,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 var DB *gorm.DB
@@ -17,8 +18,11 @@ func Connect() {
 		}
 	}
 
-	db, err := gorm.Open(sqlite.Open("data/app.db"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open("data/app.db"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
+
 		log.Fatal(err)
 	}
 	DB = db

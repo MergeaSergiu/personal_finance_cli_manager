@@ -3,13 +3,15 @@ package db
 import (
 	"errors"
 	"fmt"
-	"gorm.io/gorm"
 	"peronal_finance_cli_manager/internal/models"
+	"time"
+
+	"gorm.io/gorm"
 )
 
 var _ *gorm.DB
 
-func CreateTransaction(categoryName string, amount float32) (*models.Transaction, error) {
+func CreateTransaction(categoryName string, amount float32, dateStr string) (*models.Transaction, error) {
 	var cat models.Category
 	if err := DB.Where("name = ?", categoryName).First(&cat).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -18,9 +20,16 @@ func CreateTransaction(categoryName string, amount float32) (*models.Transaction
 		return nil, err
 	}
 
+	// parse date string
+	date, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid date format, use YYYY-MM-DD")
+	}
+
 	tx := &models.Transaction{
 		CategoryID: cat.ID,
 		Amount:     amount,
+		Date:       date,
 	}
 
 	if err := DB.Create(tx).Error; err != nil {
