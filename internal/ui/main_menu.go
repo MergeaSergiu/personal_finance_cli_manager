@@ -7,6 +7,8 @@ import (
 	"peronal_finance_cli_manager/internal/db"
 	"peronal_finance_cli_manager/internal/models"
 	"peronal_finance_cli_manager/internal/transaction"
+	"strconv"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -22,7 +24,17 @@ const (
 	StateAddTransaction
 	StateViewTransactions
 	StateImportCSV
+	StateFilterTransactions state = iota + 100
 )
+
+type FilterTransactionsModel struct {
+	input        textinput.Model
+	transactions []models.Transaction
+	filtered     []models.Transaction
+	mode         string // "date", "beforeDate", "year"
+	modes        []string
+	errMsg       string
+}
 
 type MenuModel struct {
 	list                  list.Model
@@ -35,6 +47,8 @@ type MenuModel struct {
 
 	importInput textinput.Model
 	importMsg   string
+
+	filterModel *FilterTransactionsModel
 }
 
 type CategoryItem models.Category
@@ -66,28 +80,97 @@ func NewMenuModel() *MenuModel {
 	}
 }
 
+func NewFilterTransactionsModel(txs []models.Transaction, mode string) *FilterTransactionsModel {
+	ti := textinput.New()
+	ti.Placeholder = "Enter filter value"
+	ti.Focus()
+
+	modes := []string{"date", "beforeDate", "year"}
+
+	return &FilterTransactionsModel{
+		input:        ti,
+		transactions: txs,
+		mode:         mode,
+		modes:        modes,
+	}
+}
+
 // Init satisfies tea.Model interface
 func (m *MenuModel) Init() tea.Cmd {
 	return nil
 }
 
+func (m *FilterTransactionsModel) Update(msg tea.Msg) (*FilterTransactionsModel, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyEnter:
+			value := m.input.Value()
+			m.errMsg = ""
+
+			switch m.mode {
+			case "date":
+				date, err := time.Parse("2006-01-02", value)
+				if err != nil {
+					m.errMsg = "Invalid date format (YYYY-MM-DD)"
+					return m, nil
+				}
+				m.filtered = transaction.FilterByExactDate(m.transactions, date)
+
+			case "beforeDate":
+				date, err := time.Parse("2006-01-02", value)
+				if err != nil {
+					m.errMsg = "Invalid date format (YYYY-MM-DD)"
+					return m, nil
+				}
+				m.filtered = transaction.FilterBeforeDate(m.transactions, date)
+
+			case "year":
+				y, err := strconv.Atoi(value)
+				if err != nil {
+					m.errMsg = "Invalid year"
+					return m, nil
+				}
+				m.filtered = transaction.FilterByYear(m.transactions, y)
+
+			}
+
+			return m, nil
+
+		case tea.KeyRunes:
+			if len(msg.Runes) > 0 {
+				switch msg.Runes[0] {
+				case 'f':
+					// cycle filter mode
+					idx := 0
+					for i, mname := range m.modes {
+						if mname == m.mode {
+							idx = i
+							break
+						}
+					}
+					idx = (idx + 1) % len(m.modes)
+					m.mode = m.modes[idx]
+					m.input.SetValue("")
+					m.filtered = nil
+					m.errMsg = ""
+					return m, nil
+
+				case 'b':
+					// Back to previous menu
+					return m, nil
+				}
+			}
+		}
+	}
+
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	return m, cmd
+}
+
 // Update handles key presses
 func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-
-	// 1️⃣ Handle ESC globally first
-	//if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.Type == tea.KeyEsc {
-	//	switch m.state {
-	//	case StateAdd, StateAddTransaction, StateImportCSV:
-	//		m.state = StateList
-	//		m.inputModel.reset()
-	//		m.transactionInputModel.reset()
-	//	case StateView:
-	//		m.state = StateList
-	//	case StateViewTransactions:
-	//		m.state = StateView
-	//	}
-	//	return m, nil
-	//}
 
 	// 2️⃣ Handle window resize
 	switch msg := msg.(type) {
@@ -107,10 +190,6 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case "a":
 				m.state = StateAdd
-				//m.inputModel.input.SetValue("")
-				//m.inputModel.inputBudget.SetValue("")
-				//m.inputModel.focusIndex = 0
-				//m.inputModel.errMsg = ""
 				m.inputModel.reset()
 				return m, nil
 
@@ -132,34 +211,11 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 
 			case "t": // Add Transaction
-				//m.transactionInputModel.inputCategory.SetValue("")
-				//m.transactionInputModel.inputAmount.SetValue("")
-				//m.transactionInputModel.inputDate.SetValue("")
-				//m.transactionInputModel.focusIndex = 0
-				//m.transactionInputModel.errMsg = ""
 				m.transactionInputModel.reset()
 				m.state = StateAddTransaction
 				return m, nil
 
 			case "i":
-				//fmt.Print("Enter CSV file path: ")
-				//var path string
-				//fmt.Scanln(&path)
-				//
-				//txs, err := transaction.ParseCSV(path)
-				//if err != nil {
-				//	fmt.Println("Error parsing CSV:", err)
-				//	return m, nil
-				//}
-				//
-				//for _, tx := range txs {
-				//	_, err := db.CreateTransaction(tx.Category.Name, tx.Amount, tx.Date.Format("2006-01-02"))
-				//	if err != nil {
-				//		fmt.Println("Error saving transaction:", err)
-				//	}
-				//}
-				//
-				//fmt.Printf("✅ Imported %d transactions\n", len(txs))
 				m.importInput.SetValue("")
 				m.importMsg = ""
 				m.state = StateImportCSV
@@ -182,13 +238,6 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.list.InsertItem(len(m.list.Items()), CategoryItem(*cat))
 			m.state = StateList
 		}
-
-		//if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "b" && cat == nil {
-		//	m.state = StateList
-		//	m.inputModel.input.SetValue("")
-		//	m.inputModel.inputBudget.SetValue("")
-		//	m.inputModel.errMsg = ""
-		//}
 
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "b" {
 			m.state = StateList
@@ -246,10 +295,32 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ====================== VIEW TRANSACTIONS ======================
 	case StateViewTransactions:
-		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "b" {
-			m.state = StateView
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "b": // Back
+				m.state = StateView
+			case "f": // Open filter menu
+				// Here we let user select the filter mode first (hardcoded "date" for example)
+				// Later we can add a dynamic selection menu for mode
+				m.filterModel = NewFilterTransactionsModel(m.transactions, "date")
+				m.state = StateFilterTransactions
+			}
 		}
 		return m, nil
+
+	case StateFilterTransactions:
+		var cmd tea.Cmd
+		m.filterModel, cmd = m.filterModel.Update(msg)
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "b": // Go back to transactions view
+				m.state = StateViewTransactions
+				m.filterModel = nil
+			case "f": // Change filter mode (optional, if implemented)
+				// Logic to switch filter mode
+			}
+		}
+		return m, cmd
 
 	case StateImportCSV:
 		var cmd tea.Cmd
@@ -354,7 +425,7 @@ func (m *MenuModel) View() string {
 			)
 		}
 
-		view += "\n[b] Back"
+		view += "\n[b] Back • [f] Filter Transactions • [q] Quit"
 		return view
 
 	case StateImportCSV:
@@ -364,6 +435,11 @@ func (m *MenuModel) View() string {
 		}
 		view += "\n\n[Enter] Import • [b] Back"
 		return view
+
+	case StateFilterTransactions:
+		if m.filterModel != nil {
+			return m.filterModel.View()
+		}
 	}
 
 	return ""

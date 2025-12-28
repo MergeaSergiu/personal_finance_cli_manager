@@ -348,3 +348,33 @@ func renderInput(input textinput.Model, focused bool) string {
 	}
 	return input.View()
 }
+
+func (m *FilterTransactionsModel) View() string {
+	view := ""
+	if m.errMsg != "" {
+		view += fmt.Sprintf("❌ %s\n\n", m.errMsg)
+	}
+	view += fmt.Sprintf("Filter mode: %s\n", m.mode)
+	view += fmt.Sprintf("Value: %s\n", m.input.Value())
+
+	// <-- Add instructions here
+	view += "\n[Enter] Apply Filter • [b] Back • [f] Change Filter Mode\n\n"
+	if len(m.filtered) > 0 {
+		for _, tx := range m.filtered {
+			sign := "+"
+			if tx.Amount < 0 {
+				sign = "-"
+			}
+			view += fmt.Sprintf("%s%.2f | %s | %s\n",
+				sign,
+				tx.Amount,
+				tx.Date.Format("2006-01-02"),
+				tx.Category.Name,
+			)
+		}
+	} else if len(m.input.Value()) > 0 { // show "No transactions matched" only after input
+		view += "No transactions matched.\n"
+	}
+
+	return view
+}
