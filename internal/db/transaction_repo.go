@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"peronal_finance_cli_manager/internal/models"
+	"peronal_finance_cli_manager/internal/transaction"
 	"time"
 
 	"gorm.io/gorm"
@@ -57,4 +58,33 @@ func GetTransactionsByCategory(categoryID uint) ([]models.Transaction, error) {
 		Find(&txs).Error
 
 	return txs, err
+}
+
+// ImportTransactionsFromFile parses a file (CSV/OFX) and inserts transactions into the DB.
+func ImportTransactionsFromFile(filePath string) ([]models.Transaction, error) {
+	var transactions []models.Transaction
+	var err error
+
+	switch transaction.DetectFormat(filePath) {
+	case "csv":
+		transactions, err = transaction.ParseCSV(filePath)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errors.New("unsupported file format")
+	}
+
+	var imported []models.Transaction
+	for _, tx := range transactions {
+		newTx, err := CreateTransaction(tx.Category.Name, tx.Amount, tx.Date.Format("2006-01-02"))
+		if err != nil {
+			// Skip invalid transactions but log error
+			fmt.Printf("Failed to import transaction: %v\n", err)
+			continue
+		}
+		imported = append(imported, *newTx)
+	}
+
+	return imported, nil
 }

@@ -1,13 +1,42 @@
 package ui
 
 import (
+	"fmt"
 	"peronal_finance_cli_manager/internal/db"
 	"peronal_finance_cli_manager/internal/models"
 	"strconv"
 
+	"github.com/charmbracelet/lipgloss"
+	_ "github.com/charmbracelet/lipgloss"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+var (
+	focusedStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("62"))
+
+	errorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("1"))
+)
+
+type FileInputModel struct {
+	input  textinput.Model
+	errMsg string
+	focus  bool
+}
+
+func NewFileInputModel() *FileInputModel {
+	ti := textinput.New()
+	ti.Placeholder = "Enter CSV/OFX file path"
+	ti.Focus()
+	return &FileInputModel{
+		input: ti,
+		focus: true,
+	}
+}
 
 type TransactionInputModel struct {
 	inputCategory textinput.Model
@@ -70,46 +99,18 @@ func NewInputModelPtr() *InputModel {
 func (m *InputModel) Update(msg tea.Msg) (*InputModel, tea.Cmd, *models.Category, error) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
+		switch msg.Type {
 
-		case "tab":
+		case tea.KeyTab:
 			m.focusIndex = (m.focusIndex + 1) % 2
-			if m.focusIndex == 0 {
-				m.input.Focus()
-				m.inputBudget.Blur()
-			} else {
-				m.input.Blur()
-				m.inputBudget.Focus()
-			}
-
+			m.updateFocus()
 			return m, nil, nil, nil
 
-		case "enter":
+		case tea.KeyEnter:
 
-			budget := 0.0
-			if m.inputBudget.Value() != "" {
-				parsed, err := strconv.ParseFloat(m.inputBudget.Value(), 32)
-				if err != nil {
-					m.errMsg = "Invalid budget"
-					return m, nil, nil, nil
-				}
-				budget = parsed
-			}
+			return m.submit()
 
-			if m.input.Value() == "" {
-				m.errMsg = "Invalid Name"
-				return m, nil, nil, nil
-			}
-			cat, err := db.CreateCategory(m.input.Value(), float32(budget))
-			if err != nil {
-
-				m.errMsg = err.Error()
-				return m, nil, nil, err
-			}
-			m.errMsg = ""
-			return m, nil, cat, nil
-
-		case "b":
+		case tea.KeyEsc:
 			return m, nil, nil, nil
 		}
 	}
@@ -121,68 +122,74 @@ func (m *InputModel) Update(msg tea.Msg) (*InputModel, tea.Cmd, *models.Category
 	return m, tea.Batch(cmd1, cmd2), nil, nil
 }
 
-func (m *TransactionInputModel) Update(msg tea.Msg) (*TransactionInputModel, tea.Cmd, *models.Transaction, error) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
+func (m *InputModel) updateFocus() {
+	m.input.Blur()
+	m.inputBudget.Blur()
 
-		case "tab":
+	if m.focusIndex == 0 {
+		m.input.Focus()
+	} else {
+		m.inputBudget.Focus()
+	}
+}
+
+func (m *InputModel) submit() (
+	*InputModel,
+	tea.Cmd,
+	*models.Category,
+	error,
+) {
+
+	if m.input.Value() == "" {
+		m.errMsg = "Invalid name"
+		return m, nil, nil, nil
+	}
+
+	var budget float32 = 0
+	if m.inputBudget.Value() != "" {
+		parsed, err := strconv.ParseFloat(m.inputBudget.Value(), 32)
+		if err != nil {
+			m.errMsg = "Invalid budget"
+			return m, nil, nil, nil
+		}
+		budget = float32(parsed)
+	}
+
+	cat, err := db.CreateCategory(m.input.Value(), budget)
+	if err != nil {
+		m.errMsg = err.Error()
+		return m, nil, nil, err
+	}
+
+	m.errMsg = ""
+	m.reset()
+
+	return m, nil, cat, nil
+}
+
+func (m *InputModel) reset() {
+	m.input.SetValue("")
+	m.inputBudget.SetValue("")
+	m.focusIndex = 0
+	m.updateFocus()
+}
+
+func (m *TransactionInputModel) Update(msg tea.Msg) (*TransactionInputModel, tea.Cmd, *models.Transaction, error) {
+
+	switch msg := msg.(type) {
+
+	case tea.KeyMsg:
+		switch msg.Type {
+
+		case tea.KeyTab:
 			m.focusIndex = (m.focusIndex + 1) % 3
-			if m.focusIndex == 0 {
-				m.inputCategory.Focus()
-				m.inputAmount.Blur()
-				m.inputDate.Blur()
-			} else if m.focusIndex == 1 {
-				m.inputCategory.Blur()
-				m.inputAmount.Focus()
-				m.inputDate.Blur()
-			} else {
-				m.inputCategory.Blur()
-				m.inputAmount.Blur()
-				m.inputDate.Focus()
-			}
+			m.updateFocus()
 			return m, nil, nil, nil
 
-		case "enter":
-			// parse amount
-			amount := float32(0)
-			if m.inputAmount.Value() != "" {
-				val, err := strconv.ParseFloat(m.inputAmount.Value(), 32)
-				if err != nil {
-					m.errMsg = "Invalid amount"
-					return m, nil, nil, nil
-				}
-				amount = float32(val)
-			} else {
-				m.errMsg = "Amount cannot be empty"
-				return m, nil, nil, nil
-			}
+		case tea.KeyEnter:
+			return m.submit()
 
-			categoryName := m.inputCategory.Value()
-			if categoryName == "" {
-				m.errMsg = "Category cannot be empty"
-				return m, nil, nil, nil
-			}
-
-			dateStr := m.inputDate.Value()
-			if dateStr == "" {
-				m.errMsg = "Date cannot be empty (YYYY-MM-DD)"
-				return m, nil, nil, nil
-			}
-
-			tx, err := db.CreateTransaction(categoryName, amount, dateStr)
-			if err != nil {
-				m.errMsg = err.Error()
-				m.inputCategory.SetValue("") // reset category if not found
-				m.inputAmount.SetValue("")
-				m.inputDate.SetValue("")
-				return m, nil, nil, nil
-			}
-
-			m.errMsg = ""
-			return m, nil, tx, nil
-
-		case "b":
+		case tea.KeyEsc:
 			return m, nil, nil, nil
 		}
 	}
@@ -196,19 +203,115 @@ func (m *TransactionInputModel) Update(msg tea.Msg) (*TransactionInputModel, tea
 	return m, tea.Batch(cmd1, cmd2, cmd3), nil, nil
 }
 
+func (m *FileInputModel) Update(msg tea.Msg) (*FileInputModel, tea.Cmd, string, error) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyEnter:
+			path := m.input.Value()
+			if path == "" {
+				m.errMsg = "File path cannot be empty"
+				return m, nil, "", nil
+			}
+
+			// Import transactions via db package
+			imported, err := db.ImportTransactionsFromFile(path)
+			if err != nil {
+				m.errMsg = fmt.Sprintf("Import failed: %v", err)
+				return m, nil, "", err
+			}
+
+			fmt.Printf("Imported %d transactions successfully\n", len(imported))
+			return m, nil, path, nil
+
+		case tea.KeyEsc:
+			return m, nil, "", nil
+		}
+	}
+
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	return m, cmd, "", nil
+}
+
+func (m *TransactionInputModel) updateFocus() {
+	m.inputCategory.Blur()
+	m.inputAmount.Blur()
+	m.inputDate.Blur()
+
+	switch m.focusIndex {
+	case 0:
+		m.inputCategory.Focus()
+	case 1:
+		m.inputAmount.Focus()
+	case 2:
+		m.inputDate.Focus()
+	}
+}
+
+func (m *TransactionInputModel) submit() (
+	*TransactionInputModel,
+	tea.Cmd,
+	*models.Transaction,
+	error,
+) {
+
+	category := m.inputCategory.Value()
+	if category == "" {
+		m.errMsg = "Category cannot be empty"
+		return m, nil, nil, nil
+	}
+
+	amount, err := strconv.ParseFloat(m.inputAmount.Value(), 32)
+	if err != nil {
+		m.errMsg = "Invalid amount"
+		return m, nil, nil, nil
+	}
+
+	dateStr := m.inputDate.Value()
+	if dateStr == "" {
+		m.errMsg = "Date cannot be empty (YYYY-MM-DD)"
+		return m, nil, nil, nil
+	}
+
+	tx, err := db.CreateTransaction(
+		category,
+		float32(amount),
+		dateStr,
+	)
+	if err != nil {
+		m.errMsg = err.Error()
+		return m, nil, nil, nil
+	}
+
+	m.errMsg = ""
+	m.reset()
+
+	return m, nil, tx, nil
+}
+
+func (m *TransactionInputModel) reset() {
+	m.inputCategory.SetValue("")
+	m.inputAmount.SetValue("")
+	m.inputDate.SetValue("")
+	m.focusIndex = 0
+	m.updateFocus()
+}
+
 // View renders the input box
 func (m *InputModel) View() string {
 
 	view := ""
 
 	if m.errMsg != "" {
-		view += "❌ " + m.errMsg + "\n\n"
+		view += errorStyle.Render("❌ " + m.errMsg)
+		view += "\n\n"
 	}
-	view += m.input.View() + "\n"
-	view += m.inputBudget.View()
 
-	view += "\n\n[Tab] Switch field • [Enter] Save • [b] Back"
+	view += renderInput(m.input, m.focusIndex == 0) + "\n"
+	view += renderInput(m.inputBudget, m.focusIndex == 1)
 
+	view += "\n\n[Tab] Switch • [Enter] Save • [b] Back"
 	return view
 }
 
@@ -216,14 +319,32 @@ func (m *TransactionInputModel) View() string {
 	view := ""
 
 	if m.errMsg != "" {
-		view += "❌ " + m.errMsg + "\n\n"
+		view += errorStyle.Render("❌ " + m.errMsg)
+		view += "\n\n"
 	}
 
-	view += m.inputCategory.View() + "\n"
-	view += m.inputAmount.View() + "\n"
-	view += m.inputDate.View()
+	view += renderInput(m.inputCategory, m.focusIndex == 0) + "\n"
+	view += renderInput(m.inputAmount, m.focusIndex == 1) + "\n"
+	view += renderInput(m.inputDate, m.focusIndex == 2)
 
-	view += "\n\n[Tab] Switch field • [Enter] Save • [b] Back"
-
+	view += "\n\n[Tab] Next • [Enter] Save • [b] Back"
 	return view
+}
+
+func (m *FileInputModel) View() string {
+	view := ""
+	if m.errMsg != "" {
+		view += errorStyle.Render("❌ " + m.errMsg)
+		view += "\n\n"
+	}
+	view += renderInput(m.input, m.focus)
+	view += "\n\n[Enter] Import • [Esc] Back"
+	return view
+}
+
+func renderInput(input textinput.Model, focused bool) string {
+	if focused {
+		return focusedStyle.Render(input.View())
+	}
+	return input.View()
 }
