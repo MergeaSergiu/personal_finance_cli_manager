@@ -53,23 +53,23 @@ func NewTransactionInputModel() *TransactionInputModel {
 
 	descInput := textinput.New()
 	descInput.Placeholder = "Description"
-	descInput.CharLimit = 128
-	descInput.Blur()
+	//descInput.CharLimit = 128
+	//descInput.Blur()
 
 	catInput := textinput.New()
 	catInput.Placeholder = "Category Name"
-	catInput.CharLimit = 64
-	catInput.Focus()
+	//catInput.CharLimit = 64
+	//catInput.Focus()
 
 	amountInput := textinput.New()
 	amountInput.Placeholder = "Amount"
-	amountInput.CharLimit = 10
-	amountInput.Blur()
+	//amountInput.CharLimit = 10
+	//amountInput.Blur()
 
 	dateInput := textinput.New()
 	dateInput.Placeholder = "Date (YYYY-MM-DD)"
-	dateInput.CharLimit = 10
-	dateInput.Blur()
+	//dateInput.CharLimit = 10
+	//dateInput.Blur()
 
 	return &TransactionInputModel{
 
