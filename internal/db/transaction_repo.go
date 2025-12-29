@@ -88,3 +88,40 @@ func ImportTransactionsFromFile(filePath string) ([]models.Transaction, error) {
 
 	return imported, nil
 }
+
+func GetAllTransactions() ([]models.Transaction, error) {
+	var transactions []models.Transaction
+	if err := DB.Find(&transactions).Error; err != nil {
+		return nil, err
+	}
+
+	return transactions, nil
+}
+
+func GetMonthlyExpenses(monthStr string) (map[string]float32, error) {
+	categoryTotals := make(map[string]float32)
+
+	// Query transactions joined with categories, grouped by category
+	rows, err := DB.Raw(`
+		SELECT c.name, SUM(t.amount) as total
+		FROM transactions t
+		JOIN categories c ON t.category_id = c.id
+		WHERE strftime('%Y-%m', t.date) = ?
+		GROUP BY c.name
+	`, monthStr).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var name string
+		var total float32
+		if err := rows.Scan(&name, &total); err != nil {
+			return nil, err
+		}
+		categoryTotals[name] = total
+	}
+
+	return categoryTotals, nil
+}

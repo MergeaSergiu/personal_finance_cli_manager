@@ -27,6 +27,7 @@ const (
 	StateImportCSV
 	StateFilterTransactions state = iota + 100
 	StateBudgetOverview
+	StateMonthlyExpenseChart
 )
 
 type FilterTransactionsModel struct {
@@ -51,6 +52,9 @@ type MenuModel struct {
 	importMsg   string
 
 	filterModel *FilterTransactionsModel
+
+	monthInput textinput.Model
+	chartMsg   string
 }
 
 type CategoryItem models.Category
@@ -84,6 +88,7 @@ func NewMenuModel() *MenuModel {
 		transactionInputModel: NewTransactionInputModel(),
 		importInput:           ti,
 		state:                 StateList,
+		monthInput:            monthTi,
 	}
 }
 
@@ -230,6 +235,12 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			case "p":
 				m.state = StateBudgetOverview
+				return m, nil
+
+			case "m":
+				m.chartMsg = ""           // reset previous chart
+				m.monthInput.SetValue("") // reset input
+				m.state = StateMonthlyExpenseChart
 				return m, nil
 
 			}
@@ -386,6 +397,35 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case StateMonthlyExpenseChart:
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "enter":
+				monthStr := m.monthInput.Value()
+
+				// Call the repository method
+				categoryTotals, err := db.GetMonthlyExpenses(monthStr)
+				if err != nil {
+					m.chartMsg = "❌ Failed to load monthly expenses: " + err.Error()
+					return m, nil
+				}
+
+				// Generate chart
+				m.chartMsg = generateMonthlyExpenseChart(categoryTotals)
+				return m, nil
+
+			case "b":
+				m.state = StateList
+				m.chartMsg = ""           // reset chart
+				m.monthInput.SetValue("") // reset input
+				return m, nil
+			}
+		}
+
+		var cmd tea.Cmd
+		m.monthInput, cmd = m.monthInput.Update(msg)
+		return m, cmd
 	}
 
 	return m, nil
@@ -396,7 +436,7 @@ func (m *MenuModel) View() string {
 
 	switch m.state {
 	case StateList:
-		return "[v] View Categories • [p] Budget overview • [a] Add category • [t] Add transaction • [i] Import CSV • [q] Quit"
+		return "[v] View Categories • [p] Budget overview • [a] Add category • [t] Add transaction • [m] Monthly Expense Chart • [i] Import CSV • [q] Quit"
 
 	case StateAdd:
 		return fmt.Sprintf(
@@ -564,6 +604,15 @@ func (m *MenuModel) View() string {
 		view += fmt.Sprintf("Income   %s (%v)\n", incomeBar, totalIncome)
 
 		view += "\n[b] Back"
+		return view
+
+	case StateMonthlyExpenseChart:
+		view := "📄 Monthly Expense Chart\n\n"
+		view += m.monthInput.View()
+		if m.chartMsg != "" {
+			view += "\n\n" + m.chartMsg
+		}
+		view += "\n\n[Enter] Generate • [b] Back"
 		return view
 
 	}
