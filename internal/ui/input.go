@@ -42,11 +42,20 @@ type TransactionInputModel struct {
 	inputCategory textinput.Model
 	inputAmount   textinput.Model
 	inputDate     textinput.Model
-	focusIndex    int
-	errMsg        string
+	inputDesc     textinput.Model
+
+	recommendedCategory string
+	focusIndex          int
+	errMsg              string
 }
 
 func NewTransactionInputModel() *TransactionInputModel {
+
+	descInput := textinput.New()
+	descInput.Placeholder = "Description"
+	descInput.CharLimit = 128
+	descInput.Blur()
+
 	catInput := textinput.New()
 	catInput.Placeholder = "Category Name"
 	catInput.CharLimit = 64
@@ -58,11 +67,13 @@ func NewTransactionInputModel() *TransactionInputModel {
 	amountInput.Blur()
 
 	dateInput := textinput.New()
-	dateInput.Placeholder = "Date"
+	dateInput.Placeholder = "Date (YYYY-MM-DD)"
 	dateInput.CharLimit = 10
 	dateInput.Blur()
 
 	return &TransactionInputModel{
+
+		inputDesc:     descInput,
 		inputCategory: catInput,
 		inputAmount:   amountInput,
 		inputDate:     dateInput,
@@ -78,6 +89,7 @@ type InputModel struct {
 }
 
 func NewInputModelPtr() *InputModel {
+
 	ti := textinput.New()
 	ti.Placeholder = "Category name"
 	ti.CharLimit = 64
@@ -182,7 +194,16 @@ func (m *TransactionInputModel) Update(msg tea.Msg) (*TransactionInputModel, tea
 		switch msg.Type {
 
 		case tea.KeyTab:
-			m.focusIndex = (m.focusIndex + 1) % 3
+			//m.focusIndex = (m.focusIndex + 1) % 4
+			//m.updateFocus()
+			//return m, nil, nil, nil
+			// ACCEPT recommendation if focus is on description
+			if m.focusIndex == 0 && m.recommendedCategory != "" {
+				m.inputCategory.SetValue(m.recommendedCategory)
+				m.focusIndex = 1
+			} else {
+				m.focusIndex = (m.focusIndex + 1) % 4
+			}
 			m.updateFocus()
 			return m, nil, nil, nil
 
@@ -195,12 +216,24 @@ func (m *TransactionInputModel) Update(msg tea.Msg) (*TransactionInputModel, tea
 	}
 
 	// update all 3 inputs
-	var cmd1, cmd2, cmd3 tea.Cmd
-	m.inputCategory, cmd1 = m.inputCategory.Update(msg)
-	m.inputAmount, cmd2 = m.inputAmount.Update(msg)
-	m.inputDate, cmd3 = m.inputDate.Update(msg)
+	//var cmd1, cmd2, cmd3 tea.Cmd
+	//m.inputCategory, cmd1 = m.inputCategory.Update(msg)
+	//m.inputAmount, cmd2 = m.inputAmount.Update(msg)
+	//m.inputDate, cmd3 = m.inputDate.Update(msg)
+	//
+	//return m, tea.Batch(cmd1, cmd2, cmd3), nil, nil
+	// Update inputs
+	var cmd tea.Cmd
+	m.inputDesc, cmd = m.inputDesc.Update(msg)
 
-	return m, tea.Batch(cmd1, cmd2, cmd3), nil, nil
+	// Recalculate recommendation LIVE
+	m.recommendedCategory = db.RecommendCategory(m.inputDesc.Value())
+
+	m.inputCategory, _ = m.inputCategory.Update(msg)
+	m.inputAmount, _ = m.inputAmount.Update(msg)
+	m.inputDate, _ = m.inputDate.Update(msg)
+
+	return m, cmd, nil, nil
 }
 
 func (m *FileInputModel) Update(msg tea.Msg) (*FileInputModel, tea.Cmd, string, error) {
@@ -238,14 +271,21 @@ func (m *TransactionInputModel) updateFocus() {
 	m.inputCategory.Blur()
 	m.inputAmount.Blur()
 	m.inputDate.Blur()
+	m.inputDesc.Blur()
 
 	switch m.focusIndex {
 	case 0:
-		m.inputCategory.Focus()
+		m.inputDesc.Focus()
 	case 1:
-		m.inputAmount.Focus()
+		m.inputCategory.Focus()
+
 	case 2:
+
+		m.inputAmount.Focus()
+
+	case 3:
 		m.inputDate.Focus()
+
 	}
 }
 
@@ -294,6 +334,7 @@ func (m *TransactionInputModel) reset() {
 	m.inputCategory.SetValue("")
 	m.inputAmount.SetValue("")
 	m.inputDate.SetValue("")
+	m.inputDesc.SetValue("")
 	m.focusIndex = 0
 	m.updateFocus()
 }
@@ -323,9 +364,18 @@ func (m *TransactionInputModel) View() string {
 		view += "\n\n"
 	}
 
-	view += renderInput(m.inputCategory, m.focusIndex == 0) + "\n"
-	view += renderInput(m.inputAmount, m.focusIndex == 1) + "\n"
-	view += renderInput(m.inputDate, m.focusIndex == 2)
+	view += renderInput(m.inputDesc, m.focusIndex == 0) + "\n"
+
+	if m.recommendedCategory != "" {
+		view += fmt.Sprintf(
+			"Suggested category: %s (Tab to complete the Category with this recommandation)\n\n",
+			m.recommendedCategory,
+		)
+	}
+
+	view += renderInput(m.inputCategory, m.focusIndex == 1) + "\n"
+	view += renderInput(m.inputAmount, m.focusIndex == 2) + "\n"
+	view += renderInput(m.inputDate, m.focusIndex == 3)
 
 	view += "\n\n[Tab] Next • [Enter] Save • [b] Back"
 	return view
