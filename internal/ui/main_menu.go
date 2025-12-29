@@ -8,6 +8,7 @@ import (
 	"peronal_finance_cli_manager/internal/models"
 	"peronal_finance_cli_manager/internal/transaction"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -71,6 +72,11 @@ func NewMenuModel() *MenuModel {
 	ti.Placeholder = "Enter CSV file path..."
 	ti.CharLimit = 256
 	ti.Focus()
+
+	monthTi := textinput.New()
+	monthTi.Placeholder = "Enter month (YYYY-MM)"
+	monthTi.CharLimit = 7
+	monthTi.Focus() // initially focused when entering report state
 
 	return &MenuModel{
 		list:                  l,
@@ -225,6 +231,7 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "p":
 				m.state = StateBudgetOverview
 				return m, nil
+
 			}
 		}
 
@@ -378,6 +385,7 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = StateList
 		}
 		return m, nil
+
 	}
 
 	return m, nil
@@ -460,13 +468,31 @@ func (m *MenuModel) View() string {
 		view := "📊 Budget Overview\n\n"
 
 		view += headerStyle.Render(
-			fmt.Sprintf("%-16s %7s / %-7s %6s\n",
+			fmt.Sprintf("%-16s %7s / %-7s %6s   %s\n",
 				"Category",
 				"Spent",
 				"Budget",
-				"%"),
+				"%",
+				"Utilization"),
 		)
 		view += "\n"
+
+		// find max spent to scale bars
+		var maxSpent float32
+		var totalExpense float32
+		var totalIncome float32
+		for _, s := range stats {
+			if s.Spent > maxSpent {
+				maxSpent = s.Spent
+			}
+			if strings.ToLower(s.CategoryName) == "income" {
+				totalIncome += s.Spent
+			} else {
+				totalExpense += s.Spent
+			}
+		}
+
+		barWidth := 30 // max characters for the bar
 
 		for _, s := range stats {
 			percent := calculatePercentage(s.Spent, float32(s.Budget))
@@ -483,18 +509,63 @@ func (m *MenuModel) View() string {
 				percent,
 			)
 
+			barPercent := s.Spent / maxSpent
+			filledWidth := int(barPercent * float32(barWidth))
+			if filledWidth < 1 {
+				filledWidth = 1
+			}
+			if filledWidth > barWidth {
+				filledWidth = barWidth
+			}
+
+			bar := strings.Repeat("─", filledWidth)
+
+			// color the numbers
 			switch {
 			case percent >= 100:
-				view += base + redStyle.Render(numbers) + "\n"
+				view += base + redStyle.Render(numbers) + "  " + redStyle.Render(bar) + "\n"
 			case percent >= 80:
-				view += base + orangeStyle.Render(numbers) + "\n"
+				view += base + orangeStyle.Render(numbers) + "  " + orangeStyle.Render(bar) + "\n"
 			default:
-				view += base + greenStyle.Render(numbers) + "\n"
+				view += base + greenStyle.Render(numbers) + "  " + greenStyle.Render(bar) + "\n"
 			}
 		}
 
+		// add summary chart: Expense vs Income
+		view += "\n📊 Total Expense vs Income\n\n"
+
+		// determine max value for scaling
+		maxTotal := totalExpense
+		if totalIncome > maxTotal {
+			maxTotal = totalIncome
+		}
+		summaryBarWidth := 50 // bigger lines for summary
+
+		renderSummaryBar := func(value float32, max float32, isExpense bool) string {
+			percent := value / max
+			if percent > 1 {
+				percent = 1
+			}
+			barLen := int(percent * float32(summaryBarWidth))
+			if barLen < 1 {
+				barLen = 1
+			}
+			bar := strings.Repeat("█", barLen)
+			if isExpense {
+				return redStyle.Render(bar)
+			}
+			return greenStyle.Render(bar)
+		}
+
+		expenseBar := renderSummaryBar(totalExpense, maxTotal, true)
+		incomeBar := renderSummaryBar(totalIncome, maxTotal, false)
+
+		view += fmt.Sprintf("Expense  %s (%v)\n", expenseBar, totalExpense)
+		view += fmt.Sprintf("Income   %s (%v)\n", incomeBar, totalIncome)
+
 		view += "\n[b] Back"
 		return view
+
 	}
 
 	return ""

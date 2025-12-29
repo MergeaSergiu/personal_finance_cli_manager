@@ -215,13 +215,6 @@ func (m *TransactionInputModel) Update(msg tea.Msg) (*TransactionInputModel, tea
 		}
 	}
 
-	// update all 3 inputs
-	//var cmd1, cmd2, cmd3 tea.Cmd
-	//m.inputCategory, cmd1 = m.inputCategory.Update(msg)
-	//m.inputAmount, cmd2 = m.inputAmount.Update(msg)
-	//m.inputDate, cmd3 = m.inputDate.Update(msg)
-	//
-	//return m, tea.Batch(cmd1, cmd2, cmd3), nil, nil
 	// Update inputs
 	var cmd tea.Cmd
 	m.inputDesc, cmd = m.inputDesc.Update(msg)
