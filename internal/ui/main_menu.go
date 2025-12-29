@@ -25,6 +25,7 @@ const (
 	StateViewTransactions
 	StateImportCSV
 	StateFilterTransactions state = iota + 100
+	StateBudgetOverview
 )
 
 type FilterTransactionsModel struct {
@@ -220,6 +221,10 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.importMsg = ""
 				m.state = StateImportCSV
 				return m, nil
+
+			case "p":
+				m.state = StateBudgetOverview
+				return m, nil
 			}
 		}
 
@@ -368,6 +373,11 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, cmd
 
+	case StateBudgetOverview:
+		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "b" {
+			m.state = StateList
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -378,7 +388,7 @@ func (m *MenuModel) View() string {
 
 	switch m.state {
 	case StateList:
-		return "[v] View Categories • [a] Add category • [t] Add transaction • [i] Import CSV • [q] Quit"
+		return "[v] View Categories • [p] Budget overview • [a] Add category • [t] Add transaction • [i] Import CSV • [q] Quit"
 
 	case StateAdd:
 		return fmt.Sprintf(
@@ -440,6 +450,51 @@ func (m *MenuModel) View() string {
 		if m.filterModel != nil {
 			return m.filterModel.View()
 		}
+
+	case StateBudgetOverview:
+		stats, err := db.GetBudgetStats()
+		if err != nil {
+			return "❌ Failed to load budget stats\n\n[b] Back"
+		}
+
+		view := "📊 Budget Overview\n\n"
+
+		view += headerStyle.Render(
+			fmt.Sprintf("%-16s %7s / %-7s %6s\n",
+				"Category",
+				"Spent",
+				"Budget",
+				"%"),
+		)
+		view += "\n"
+
+		for _, s := range stats {
+			percent := calculatePercentage(s.Spent, float32(s.Budget))
+
+			base := fmt.Sprintf(
+				"%-16s ",
+				s.CategoryName,
+			)
+
+			numbers := fmt.Sprintf(
+				"%7.0f / %-7.0f %6.0f%%",
+				s.Spent,
+				s.Budget,
+				percent,
+			)
+
+			switch {
+			case percent >= 100:
+				view += base + redStyle.Render(numbers) + "\n"
+			case percent >= 80:
+				view += base + orangeStyle.Render(numbers) + "\n"
+			default:
+				view += base + greenStyle.Render(numbers) + "\n"
+			}
+		}
+
+		view += "\n[b] Back"
+		return view
 	}
 
 	return ""
