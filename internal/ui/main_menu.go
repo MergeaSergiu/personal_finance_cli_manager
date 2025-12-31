@@ -60,7 +60,7 @@ type MenuModel struct {
 type CategoryItem models.Category
 
 func (c CategoryItem) Title() string {
-	return fmt.Sprintf("%s (ID: %d), (Budget: %2.f)", c.Name, c.ID, c.Budget)
+	return fmt.Sprintf("%s (Budget: %2.f)", c.Name, c.Budget)
 }
 func (c CategoryItem) Description() string { return "" }
 func (c CategoryItem) FilterValue() string { return c.Name }
