@@ -19,10 +19,12 @@ Provides category management, transactions, CSV import, monthly expense charts, 
 
 - Import transactions from CSV
 - Manually add income and expense transactions
+- Manually add expense category
 - Automatic categorization using user-defined rules (e.g., regex)
 - Budget tracking with alerts
-- The system generates charts containing transaction information
-- The user can search transactions and filter data using specific criteria.
+- The system generates charts for budget spendings overview
+- Generates reports for monthly spendings
+- The user can search & filter transactions
 - Email notifications queued via RabbitMQ and delivered via SMTP
 
 
