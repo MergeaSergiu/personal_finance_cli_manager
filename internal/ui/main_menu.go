@@ -520,7 +520,7 @@ func (m *MenuModel) View() string {
 			m.inputModel.View())
 
 	case StateView:
-		return fmt.Sprintf("%s\n\n[u] Update Category information [b] Back", m.list.View())
+		return fmt.Sprintf("%s\n\n[Enter] View Transactions [u] Update Category information [b] Back", m.list.View())
 
 	case StateAddTransaction:
 		return fmt.Sprintf(
