@@ -28,6 +28,7 @@ const (
 	StateFilterTransactions state = iota + 100
 	StateBudgetOverview
 	StateMonthlyExpenseChart
+	StateUpdateCategory
 )
 
 type FilterTransactionsModel struct {
@@ -48,6 +49,8 @@ type MenuModel struct {
 	transactions     []models.Transaction
 	selectedCategory *models.Category
 
+	editingCategory *models.Category
+
 	importInput textinput.Model
 	importMsg   string
 
@@ -55,6 +58,8 @@ type MenuModel struct {
 
 	monthInput textinput.Model
 	chartMsg   string
+
+	isUpdate bool
 }
 
 type CategoryItem models.Category
@@ -271,30 +276,51 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// ====================== VIEW CATEGORY LIST ======================
 	case StateView:
-		var cmd tea.Cmd
-		m.list, cmd = m.list.Update(msg)
 
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			switch keyMsg.String() {
 			case "enter":
 				item := m.list.SelectedItem()
 				if item == nil {
-					return m, cmd
+					return m, nil
 				}
 				cat := item.(CategoryItem)
 				m.selectedCategory = (*models.Category)(&cat)
 				txs, err := db.GetTransactionsByCategory(cat.ID)
 				if err != nil {
 					fmt.Println("Error loading transactions:", err)
-					return m, cmd
+					return m, nil
 				}
 				m.transactions = txs
 				m.state = StateViewTransactions
+
+			case "u": // 👈 UPDATE CATEGORY
+				item := m.list.SelectedItem()
+				if item == nil {
+					return m, nil
+				}
+
+				cat := item.(CategoryItem)
+				m.editingCategory = (*models.Category)(&cat)
+
+				// configure budget input only
+				m.inputModel.inputBudget.SetValue(fmt.Sprintf("%.0f", cat.Budget))
+				m.inputModel.inputBudget.Focus()
+
+				// disable name input completely
+				m.inputModel.input.Blur()
+				m.inputModel.focusIndex = 1
+
+				m.state = StateUpdateCategory
+				return m, nil
 			case "b":
 				m.state = StateList
+				return m, nil
 			}
 		}
 
+		var cmd tea.Cmd
+		m.list, cmd = m.list.Update(msg)
 		return m, cmd
 	// ====================== ADD TRANSACTION ======================
 	case StateAddTransaction:
@@ -426,6 +452,56 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.monthInput, cmd = m.monthInput.Update(msg)
 		return m, cmd
+
+	case StateUpdateCategory:
+		var cmd tea.Cmd
+		m.inputModel.inputBudget, cmd =
+			m.inputModel.inputBudget.Update(msg)
+
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+
+			case "enter":
+				parsed, err := strconv.ParseFloat(
+					m.inputModel.inputBudget.Value(), 32,
+				)
+				if err != nil {
+					m.inputModel.errMsg = "Invalid budget"
+					return m, cmd
+				}
+
+				_ = db.UpdateCategoryBudget(
+					m.editingCategory.ID,
+					float32(parsed),
+				)
+
+				if err != nil {
+					m.inputModel.errMsg = err.Error()
+					return m, cmd
+				}
+
+				// 🔁 REFRESH CATEGORY LIST (THIS FIXES IT)
+				cats, err := db.GetAllCategories()
+				if err == nil {
+					items := make([]list.Item, 0, len(cats))
+					for _, c := range cats {
+						items = append(items, CategoryItem(c))
+					}
+					m.list.SetItems(items)
+				}
+
+				m.inputModel.inputBudget.SetValue("")
+				m.editingCategory = nil
+				m.state = StateView
+
+			case "b":
+				m.inputModel.inputBudget.SetValue("")
+				m.editingCategory = nil
+				m.state = StateView
+			}
+		}
+
+		return m, cmd
 	}
 
 	return m, nil
@@ -444,7 +520,7 @@ func (m *MenuModel) View() string {
 			m.inputModel.View())
 
 	case StateView:
-		return fmt.Sprintf("%s\n\n[b] Back", m.list.View())
+		return fmt.Sprintf("%s\n\n[u] Update Category information [b] Back", m.list.View())
 
 	case StateAddTransaction:
 		return fmt.Sprintf(
@@ -613,6 +689,24 @@ func (m *MenuModel) View() string {
 			view += "\n\n" + m.chartMsg
 		}
 		view += "\n\n[Enter] Generate • [b] Back"
+		return view
+
+	case StateUpdateCategory:
+		view := fmt.Sprintf(
+			"✏️ Update Category %s\n\n",
+			m.editingCategory.Name,
+		)
+
+		if m.inputModel.errMsg != "" {
+			view += errorStyle.Render("❌ "+m.inputModel.errMsg) + "\n\n"
+		}
+
+		view += renderInput(
+			m.inputModel.inputBudget,
+			true,
+		)
+
+		view += "\n\n[Enter] Save • [b] Back"
 		return view
 
 	}

@@ -32,3 +32,14 @@ func GetBudgetStats() ([]models.BudgetStats, error) {
 
 	return stats, nil
 }
+
+func UpdateCategoryBudget(
+	id uint,
+	budget float32,
+) error {
+	return DB.
+		Model(&models.Category{}).
+		Where("id = ?", id).
+		Update("budget", budget).
+		Error
+}
