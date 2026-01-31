@@ -15,25 +15,6 @@ Provides category management, transactions, CSV import, monthly expense charts, 
 - Queue: RabbitMQ
 - Local SMTP (development): Maildev
 
-##  Features
-
-- A text-based terminal user interface implemented using Bubbletea. 
-
-- The user can import financial transactions from CSV or OFX files.
-
-- The user can manually add income or expense transactions.
-
-- The system can categorize transactions automatically based on user-defined
-  rules (e.g., using regular expressions).
-
-- The system allows budget tracking with alerts
-
-- The user can generate various reports containing transaction information
-
-- The user can search transactions and filter data using specific criteria.
-
-- System ensures data consistency and integrity
-
 ## Features
 
 - Import transactions from CSV
